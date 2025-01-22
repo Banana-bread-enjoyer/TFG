@@ -1,6 +1,5 @@
-from math import floor, gcd
+from math import floor, gcd, sqrt
 from random import randrange
-
 from numpy import mod
 
 class EllipticCurve:
@@ -64,50 +63,53 @@ class Point:
             return self
         return Point(self.curve, self.x, (-self.y) % self.curve.p)
     
+    def den_inv(self, other: 'Point') -> int:
+        if self.x is None or other.x is None:
+            raise TypeError("No se puede calcular de un punto en el infinito")
+        if self == other:
+            den = (2 * self.y) % self.curve.p
+        else:
+            den = (other.x - self.x) % self.curve.p
+
+        return pow(den, -1, self.curve.p)
+    
     def __add__(self, other: 'Point') -> 'Point':
-        """Suma de puntos"""
         if not isinstance(other, Point) or self.curve.p != other.curve.p:
             raise TypeError("Los puntos deben pertenecer a la misma curva")
+        
+        if self.x is None: return other
+        if other.x is None: return self
+        if self == -other: return Point(self.curve)
             
-        # Casos básicos
-        if self.x is None:
-            return other
-        if other.x is None:
-            return self
-            
-        # Suma de inversos
-        if self == -other:
-            return Point(self.curve)  # Devolver infinito
-            
-        # Si se suma el mismo punto
-        if self == other:
-            # Si y es 0, es el punto en el infinito
-            if self.y == 0:
-                return Point(self.curve)
+        try:
+            if self == other:
+                if self.y == 0:
+                    return Point(self.curve)
+                num = (3 * pow(self.x, 2, self.curve.p) + self.curve.a) % self.curve.p
+                den = (2 * self.y) % self.curve.p
+                if den == 0:
+                    raise ZeroDivisionError(den)
+                try:
+                    slope = (num * pow(den, -1, self.curve.p)) % self.curve.p
+                except ValueError:
+                    raise ZeroDivisionError(den)
+            else:
+                num = (other.y - self.y) % self.curve.p
+                den = (other.x - self.x) % self.curve.p
+                if den == 0:
+                    raise ZeroDivisionError(den)
+                try:
+                    slope = (num * pow(den, -1, self.curve.p)) % self.curve.p
+                except ValueError:
+                    raise ZeroDivisionError(den)
                 
-            # Calculamos la pendiente
-            # λ = (3x₁² + a) / (2y₁)
-            num = (3 * pow(self.x, 2, self.curve.p) + self.curve.a) % self.curve.p
-            den = (2 * self.y) % self.curve.p
-            # Calculamos el inverso modular respecto a p del denominador
-            den_inv = pow(den, -1, self.curve.p)
-            slope = (num * den_inv) % self.curve.p
-        else:
-            # Calculamos la pendiente para puntos diferentes
-            # λ = (y₂ - y₁) / (x₂ - x₁)
-            num = (other.y - self.y) % self.curve.p
-            den = (other.x - self.x) % self.curve.p
-            # Calculamos el inverso modular respecto a p del denominador
-            den_inv = pow(den, -1, self.curve.p)
-            slope = (num * den_inv) % self.curve.p
+            x3 = (pow(slope, 2, self.curve.p) - self.x - other.x) % self.curve.p
+            y3 = (-self.y + slope * (self.x - x3)) % self.curve.p
             
-        # Calculamos x del punto resultante: x₃ = λ² - x₁ - x₂
-        x3 = (pow(slope, 2, self.curve.p) - self.x - other.x) % self.curve.p
-        
-        # Calculamos x del punto resultante: y₃ = λ(x₁ - x₃) - y₁
-        y3 = (self.y + slope * (x3 - self.x)) % self.curve.p
-        
-        return Point(self.curve, x3, y3)
+            return Point(self.curve, x3, y3)
+            
+        except ZeroDivisionError as e:
+            raise ZeroDivisionError(e.args[0])
     
     def __sub__(self, other: 'Point') -> 'Point':
         """Resta de puntos"""
@@ -147,8 +149,8 @@ class Point:
             return "Point(∞)"
         return f"Point({self.x}, {self.y})"
     
-# Método pollarRho de descomposición de números en factores
-def pollardRho (n):
+# Método pollardRho de descomposición de números en factores
+def pollardRho(n):
     A = B = randrange(start=2, stop= n - 1, step=1)
     while True:
         A = (A*A + 1) % n
@@ -159,15 +161,41 @@ def pollardRho (n):
         if p == n: return n
 
 # Método de factorización de curva elíptica de Lenstra
+def Lenstra(n: int, B: int = 1000, attempts: int = 100) -> int:
+    for _ in range(attempts):
+        
+        x = randrange(n)
+        y = randrange(n)
+        a = randrange(n)
+        
+        try:
+            
+            b = (pow(y, 2, n) - (pow(x, 3, n) + (a * x) % n)) % n
+            c = EllipticCurve(a, b, n)
+            p = Point(c, x, y)
+            
+            
+            current = p
+            for i in range(2, B + 1):
+                current = current * i  
+                
+        except ZeroDivisionError as e:
+            
+            den = int(str(e).split()[0])
+            factor = gcd(den, n)
+            if 1 < factor < n:
+                return factor
+                
+    return None
 
 
 def main():
-    n:int = 4394179
-    while n != 1:
-        p = pollardRho(n)
-        print(p)
-        n //= p
-
+    n = 455459
+    factor = Lenstra(n)
+    if factor:
+        print(f"Un factor de n es: {factor}")
+    else:
+        print("No se encontró factor")
 
 if __name__ == "__main__":
     main()
